@@ -11,14 +11,15 @@
     .card { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 20px; padding: 24px; margin-bottom: 16px; text-align: center; border: 1px solid rgba(255,255,255,0.2); }
     h1 { font-size: 3em; margin: 0; color: #00d4ff; }
     h2 { margin: 0 0 8px; font-size: 1.4em; }
-    p { margin: 8px 0; opacity: 0.9; }
+    p { margin: 8px 0; opacity: 0.9; font-size: 0.95em; }
     input { width: 100%; padding: 16px; margin: 12px 0; border: none; border-radius: 12px; font-size: 16px; box-sizing: border-box; background: rgba(255,255,255,0.2); color: white; }
     input::placeholder { color: rgba(255,255,255,0.7); }
-    button { background: #00d4ff; color: #1e3c72; border: none; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: bold; width: 100%; margin: 8px 0; cursor: pointer; }
+    button { background: #00d4ff; color: #1e3c72; border: none; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: bold; width: 100%; margin: 8px 0; cursor: pointer; transition: 0.2s; }
     button:active { transform: scale(0.98); }
     .secondary { background: rgba(255,255,255,0.2); color: white; }
     #result { margin-top: 16px; font-weight: bold; font-size: 1.1em; }
     .logo { font-size: 2em; margin-bottom: 10px; }
+    .setup { background: rgba(255,255,255,0.15); border: 1px dashed rgba(255,255,255,0.4); }
   </style>
 </head>
 <body>
@@ -26,14 +27,26 @@
     <div class="card">
       <div class="logo">Vault401k</div>
       <h2>Your 401(k) Balance</h2>
-      <h1 id="balance">$45,230</h1>
-      <p>YTD Contributions: <b>$8,500</b></p>
+      <h1 id="balance">$0</h1>
+      <p>YTD Contributions: <b id="ytd">$0</b></p>
     </div>
-    <div class="card">
+
+    <!-- USER SETS BALANCE FIRST TIME -->
+    <div class="card setup" id="setupCard">
+      <h3>First Time? Set Your Balance</h3>
+      <input type="number" id="setBalance" placeholder="Enter current 401k balance" />
+      <button onclick="setUserBalance()">Set Balance</button>
+      <p style="font-size:0.8em; margin-top:8px;">(One-time setup)</p>
+    </div>
+
+    <!-- NORMAL ADD CONTRIBUTION -->
+    <div class="card" id="contribCard" style="display:none;">
       <h3>Add Contribution</h3>
       <input type="number" id="amount" placeholder="Enter amount (e.g. 500)" />
       <button onclick="addContribution()">Add to 401k</button>
     </div>
+
+    <!-- PROJECTION -->
     <div class="card">
       <button class="secondary" onclick="showProjection()">10-Year Projection</button>
       <p id="result"></p>
@@ -43,13 +56,37 @@
   <script>
     const userId = Telegram.WebApp.initDataUnsafe.user?.id || 'demo';
     const key = `vault401k_${userId}`;
-    const saved = JSON.parse(localStorage.getItem(key)) || { balance: 45230, yearly: 8500 };
-    let balance = saved.balance;
-    let yearlyContrib = saved.yearly;
-    document.getElementById('balance').innerText = '$' + balance.toLocaleString();
+    let balance = 0;
+    let yearlyContrib = 0;
+
+    // Load saved data
+    const saved = JSON.parse(localStorage.getItem(key));
+    if (saved) {
+      balance = saved.balance || 0;
+      yearlyContrib = saved.yearly || 0;
+      document.getElementById('balance').innerText = '$' + balance.toLocaleString();
+      document.getElementById('ytd').innerText = '$' + yearlyContrib.toLocaleString();
+      document.getElementById('setupCard').style.display = 'none';
+      document.getElementById('contribCard').style.display = 'block';
+    }
 
     function save() {
       localStorage.setItem(key, JSON.stringify({ balance, yearly: yearlyContrib }));
+    }
+
+    function setUserBalance() {
+      const amount = parseFloat(document.getElementById('setBalance').value);
+      if (amount >= 0) {
+        balance = amount;
+        yearlyContrib = 0;
+        document.getElementById('balance').innerText = '$' + balance.toLocaleString();
+        document.getElementById('ytd').innerText = '$0';
+        document.getElementById('setBalance').value = '';
+        document.getElementById('setupCard').style.display = 'none';
+        document.getElementById('contribCard').style.display = 'block';
+        save();
+        Telegram.WebApp.showAlert(`Balance set to $${amount.toLocaleString()}!`);
+      }
     }
 
     function addContribution() {
@@ -58,6 +95,7 @@
         balance += amount;
         yearlyContrib += amount;
         document.getElementById('balance').innerText = '$' + balance.toLocaleString();
+        document.getElementById('ytd').innerText = '$' + yearlyContrib.toLocaleString();
         document.getElementById('amount').value = '';
         Telegram.WebApp.HapticFeedback.impactOccurred('medium');
         Telegram.WebApp.showAlert(`$${amount.toLocaleString()} added!`);
