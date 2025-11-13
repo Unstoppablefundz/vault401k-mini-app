@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Vault 401k</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; padding: 16px; min-height: 100vh; }
     .container { max-width: 400px; margin: 0 auto; }
@@ -17,7 +16,6 @@
     input::placeholder { color: rgba(255,255,255,0.7); }
     button { background: #00d4ff; color: #1e3c72; border: none; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: bold; width: 100%; margin: 8px 0; cursor: pointer; }
     button:active { transform: scale(0.98); }
-    .plaid { background: #1328F7; }
     .secondary { background: rgba(255,255,255,0.2); color: white; }
     #result { margin-top: 16px; font-weight: bold; font-size: 1.1em; }
     .logo { font-size: 2em; margin-bottom: 10px; }
@@ -32,10 +30,10 @@
       <p>YTD Contributions: <b id="ytd">$0</b></p>
     </div>
 
-    <div class="card" id="connectCard">
-      <h3>Connect Your 401(k)</h3>
-      <button class="plaid" id="plaidBtn">Connect with Plaid</button>
-      <p style="font-size:0.8em;">Secure • No passwords saved</p>
+    <div class="card" id="setupCard">
+      <h3>Set Starting Balance</h3>
+      <input type="number" id="setBalance" placeholder="Enter current 401k balance" />
+      <button onclick="setUserBalance()">Set Balance</button>
     </div>
 
     <div class="card" id="contribCard" style="display:none;">
@@ -60,7 +58,7 @@
       balance = saved.balance; yearlyContrib = saved.yearly;
       document.getElementById('balance').innerText = '$' + balance.toLocaleString();
       document.getElementById('ytd').innerText = '$' + yearlyContrib.toLocaleString();
-      document.getElementById('connectCard').style.display = 'none';
+      document.getElementById('setupCard').style.display = 'none';
       document.getElementById('contribCard').style.display = 'block';
     }
 
@@ -68,34 +66,19 @@
       localStorage.setItem(key, JSON.stringify({ balance, yearly: yearlyContrib }));
     }
 
-    // PLAID LINK
-    const handler = Plaid.create({
-      clientName: 'Vault401k',
-      env: 'sandbox',
-      product: ['investments'],
-      key: 'PUBLIC_KEY_NOT_NEEDED_IN_SANDBOX', // Works in sandbox
-      onSuccess: async (public_token) => {
-        const res = await fetch('/api/plaid', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ public_token })
-        });
-        const data = await res.json();
-        if (data.balance) {
-          balance = data.balance;
-          yearlyContrib = data.ytd || 0;
-          document.getElementById('balance').innerText = '$' + balance.toLocaleString();
-          document.getElementById('ytd').innerText = '$' + yearlyContrib.toLocaleString();
-          document.getElementById('connectCard').style.display = 'none';
-          document.getElementById('contribCard').style.display = 'block';
-          save();
-          Telegram.WebApp.showAlert('Connected! Balance updated.');
-        }
-      },
-      onExit: () => Telegram.WebApp.showAlert('Connection cancelled.')
-    });
-
-    document.getElementById('plaidBtn').onclick = () => handler.open();
+    function setUserBalance() {
+      const amount = parseFloat(document.getElementById('setBalance').value);
+      if (amount >= 0) {
+        balance = amount; yearlyContrib = 0;
+        document.getElementById('balance').innerText = '$' + balance.toLocaleString();
+        document.getElementById('ytd').innerText = '$0';
+        document.getElementById('setBalance').value = '';
+        document.getElementById('setupCard').style.display = 'none';
+        document.getElementById('contribCard').style.display = 'block';
+        save();
+        Telegram.WebApp.showAlert(`Balance set to $${amount.toLocaleString()}!`);
+      }
+    }
 
     function addContribution() {
       const amount = parseFloat(document.getElementById('amount').value);
