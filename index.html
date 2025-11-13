@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vault 401k</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; padding: 16px; min-height: 100vh; }
+    .container { max-width: 400px; margin: 0 auto; }
+    .card { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border-radius: 20px; padding: 24px; margin-bottom: 16px; text-align: center; border: 1px solid rgba(255,255,255,0.2); }
+    h1 { font-size: 3em; margin: 0; color: #00d4ff; }
+    h2 { margin: 0 0 8px; font-size: 1.4em; }
+    p { margin: 8px 0; opacity: 0.9; }
+    input { width: 100%; padding: 16px; margin: 12px 0; border: none; border-radius: 12px; font-size: 16px; box-sizing: border-box; background: rgba(255,255,255,0.2); color: white; }
+    input::placeholder { color: rgba(255,255,255,0.7); }
+    button { background: #00d4ff; color: #1e3c72; border: none; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: bold; width: 100%; margin: 8px 0; cursor: pointer; }
+    button:active { transform: scale(0.98); }
+    .secondary { background: rgba(255,255,255,0.2); color: white; }
+    #result { margin-top: 16px; font-weight: bold; font-size: 1.1em; }
+    .logo { font-size: 2em; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="logo">Vault401k</div>
+      <h2>Your 401(k) Balance</h2>
+      <h1 id="balance">$45,230</h1>
+      <p>YTD Contributions: <b>$8,500</b></p>
+    </div>
+    <div class="card">
+      <h3>Add Contribution</h3>
+      <input type="number" id="amount" placeholder="Enter amount (e.g. 500)" />
+      <button onclick="addContribution()">Add to 401k</button>
+    </div>
+    <div class="card">
+      <button class="secondary" onclick="showProjection()">10-Year Projection</button>
+      <p id="result"></p>
+    </div>
+  </div>
+
+  <script>
+    const userId = Telegram.WebApp.initDataUnsafe.user?.id || 'demo';
+    const key = `vault401k_${userId}`;
+    const saved = JSON.parse(localStorage.getItem(key)) || { balance: 45230, yearly: 8500 };
+    let balance = saved.balance;
+    let yearlyContrib = saved.yearly;
+    document.getElementById('balance').innerText = '$' + balance.toLocaleString();
+
+    function save() {
+      localStorage.setItem(key, JSON.stringify({ balance, yearly: yearlyContrib }));
+    }
+
+    function addContribution() {
+      const amount = parseFloat(document.getElementById('amount').value);
+      if (amount > 0) {
+        balance += amount;
+        yearlyContrib += amount;
+        document.getElementById('balance').innerText = '$' + balance.toLocaleString();
+        document.getElementById('amount').value = '';
+        Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+        Telegram.WebApp.showAlert(`$${amount.toLocaleString()} added!`);
+        save();
+      }
+    }
+
+    function showProjection() {
+      const rate = 0.07, years = 10;
+      const future = balance * Math.pow(1 + rate, years) + 
+                     (yearlyContrib * 12 * ((Math.pow(1 + rate, years) - 1) / rate));
+      document.getElementById('result').innerHTML = 
+        `<b>In ${years} years:</b><br>~$${Math.round(future).toLocaleString()}`;
+    }
+
+    Telegram.WebApp.ready();
+    Telegram.WebApp.expand();
+  </script>
+</body>
+</html>
