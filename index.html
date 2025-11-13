@@ -115,4 +115,85 @@
     Telegram.WebApp.expand();
   </script>
 </body>
+</html>      <input type="number" id="setBalance" placeholder="Enter current 401k balance" />
+      <button onclick="setUserBalance()">Set Balance</button>
+      <p style="font-size:0.8em; margin-top:8px;">(One-time setup)</p>
+    </div>
+
+    <!-- NORMAL ADD CONTRIBUTION -->
+    <div class="card" id="contribCard" style="display:none;">
+      <h3>Add Contribution</h3>
+      <input type="number" id="amount" placeholder="Enter amount (e.g. 500)" />
+      <button onclick="addContribution()">Add to 401k</button>
+    </div>
+
+    <!-- PROJECTION -->
+    <div class="card">
+      <button class="secondary" onclick="showProjection()">10-Year Projection</button>
+      <p id="result"></p>
+    </div>
+  </div>
+
+  <script>
+    const userId = Telegram.WebApp.initDataUnsafe.user?.id || 'demo';
+    const key = `vault401k_${userId}`;
+    let balance = 0;
+    let yearlyContrib = 0;
+
+    // Load saved data
+    const saved = JSON.parse(localStorage.getItem(key));
+    if (saved) {
+      balance = saved.balance || 0;
+      yearlyContrib = saved.yearly || 0;
+      document.getElementById('balance').innerText = '$' + balance.toLocaleString();
+      document.getElementById('ytd').innerText = '$' + yearlyContrib.toLocaleString();
+      document.getElementById('setupCard').style.display = 'none';
+      document.getElementById('contribCard').style.display = 'block';
+    }
+
+    function save() {
+      localStorage.setItem(key, JSON.stringify({ balance, yearly: yearlyContrib }));
+    }
+
+    function setUserBalance() {
+      const amount = parseFloat(document.getElementById('setBalance').value);
+      if (amount >= 0) {
+        balance = amount;
+        yearlyContrib = 0;
+        document.getElementById('balance').innerText = '$' + balance.toLocaleString();
+        document.getElementById('ytd').innerText = '$0';
+        document.getElementById('setBalance').value = '';
+        document.getElementById('setupCard').style.display = 'none';
+        document.getElementById('contribCard').style.display = 'block';
+        save();
+        Telegram.WebApp.showAlert(`Balance set to $${amount.toLocaleString()}!`);
+      }
+    }
+
+    function addContribution() {
+      const amount = parseFloat(document.getElementById('amount').value);
+      if (amount > 0) {
+        balance += amount;
+        yearlyContrib += amount;
+        document.getElementById('balance').innerText = '$' + balance.toLocaleString();
+        document.getElementById('ytd').innerText = '$' + yearlyContrib.toLocaleString();
+        document.getElementById('amount').value = '';
+        Telegram.WebApp.HapticFeedback.impactOccurred('medium');
+        Telegram.WebApp.showAlert(`$${amount.toLocaleString()} added!`);
+        save();
+      }
+    }
+
+    function showProjection() {
+      const rate = 0.07, years = 10;
+      const future = balance * Math.pow(1 + rate, years) + 
+                     (yearlyContrib * 12 * ((Math.pow(1 + rate, years) - 1) / rate));
+      document.getElementById('result').innerHTML = 
+        `<b>In ${years} years:</b><br>~$${Math.round(future).toLocaleString()}`;
+    }
+
+    Telegram.WebApp.ready();
+    Telegram.WebApp.expand();
+  </script>
+</body>
 </html>
