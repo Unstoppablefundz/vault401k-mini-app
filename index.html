@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Vault 401k</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; padding: 16px; min-height: 100vh; }
     .container { max-width: 400px; margin: 0 auto; }
@@ -14,12 +15,12 @@
     p { margin: 8px 0; opacity: 0.9; font-size: 0.95em; }
     input { width: 100%; padding: 16px; margin: 12px 0; border: none; border-radius: 12px; font-size: 16px; box-sizing: border-box; background: rgba(255,255,255,0.2); color: white; }
     input::placeholder { color: rgba(255,255,255,0.7); }
-    button { background: #00d4ff; color: #1e3c72; border: none; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: bold; width: 100%; margin: 8px 0; cursor: pointer; transition: 0.2s; }
+    button { background: #00d4ff; color: #1e3c72; border: none; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: bold; width: 100%; margin: 8px 0; cursor: pointer; }
     button:active { transform: scale(0.98); }
+    .plaid { background: #1328F7; }
     .secondary { background: rgba(255,255,255,0.2); color: white; }
     #result { margin-top: 16px; font-weight: bold; font-size: 1.1em; }
     .logo { font-size: 2em; margin-bottom: 10px; }
-    .setup { background: rgba(255,255,255,0.15); border: 1px dashed rgba(255,255,255,0.4); }
   </style>
 </head>
 <body>
@@ -31,24 +32,20 @@
       <p>YTD Contributions: <b id="ytd">$0</b></p>
     </div>
 
-    <!-- USER SETS BALANCE FIRST TIME -->
-    <div class="card setup" id="setupCard">
-      <h3>First Time? Set Your Balance</h3>
-      <input type="number" id="setBalance" placeholder="Enter current 401k balance" />
-      <button onclick="setUserBalance()">Set Balance</button>
-      <p style="font-size:0.8em; margin-top:8px;">(One-time setup)</p>
+    <div class="card" id="connectCard">
+      <h3>Connect Your 401(k)</h3>
+      <button class="plaid" id="plaidBtn">Connect with Plaid</button>
+      <p style="font-size:0.8em;">Secure • No passwords saved</p>
     </div>
 
-    <!-- NORMAL ADD CONTRIBUTION -->
     <div class="card" id="contribCard" style="display:none;">
-      <h3>Add Contribution</h3>
+      <h3>Add to 401k</h3>
       <input type="number" id="amount" placeholder="Enter amount (e.g. 500)" />
       <button onclick="addContribution()">Add to 401k</button>
     </div>
 
-    <!-- PROJECTION -->
     <div class="card">
-      <button class="secondary" onclick="showProjection()">10-Year Projection</button>
+      <button class="secondary" onclick="showProjection()">Future Value (10 yrs)</button>
       <p id="result"></p>
     </div>
   </div>
@@ -56,17 +53,14 @@
   <script>
     const userId = Telegram.WebApp.initDataUnsafe.user?.id || 'demo';
     const key = `vault401k_${userId}`;
-    let balance = 0;
-    let yearlyContrib = 0;
+    let balance = 0, yearlyContrib = 0;
 
-    // Load saved data
     const saved = JSON.parse(localStorage.getItem(key));
     if (saved) {
-      balance = saved.balance || 0;
-      yearlyContrib = saved.yearly || 0;
+      balance = saved.balance; yearlyContrib = saved.yearly;
       document.getElementById('balance').innerText = '$' + balance.toLocaleString();
       document.getElementById('ytd').innerText = '$' + yearlyContrib.toLocaleString();
-      document.getElementById('setupCard').style.display = 'none';
+      document.getElementById('connectCard').style.display = 'none';
       document.getElementById('contribCard').style.display = 'block';
     }
 
@@ -74,122 +68,50 @@
       localStorage.setItem(key, JSON.stringify({ balance, yearly: yearlyContrib }));
     }
 
-    function setUserBalance() {
-      const amount = parseFloat(document.getElementById('setBalance').value);
-      if (amount >= 0) {
-        balance = amount;
-        yearlyContrib = 0;
-        document.getElementById('balance').innerText = '$' + balance.toLocaleString();
-        document.getElementById('ytd').innerText = '$0';
-        document.getElementById('setBalance').value = '';
-        document.getElementById('setupCard').style.display = 'none';
-        document.getElementById('contribCard').style.display = 'block';
-        save();
-        Telegram.WebApp.showAlert(`Balance set to $${amount.toLocaleString()}!`);
-      }
-    }
+    // PLAID LINK
+    const handler = Plaid.create({
+      clientName: 'Vault401k',
+      env: 'sandbox',
+      product: ['investments'],
+      key: 'PUBLIC_KEY_NOT_NEEDED_IN_SANDBOX', // Works in sandbox
+      onSuccess: async (public_token) => {
+        const res = await fetch('/api/plaid', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ public_token })
+        });
+        const data = await res.json();
+        if (data.balance) {
+          balance = data.balance;
+          yearlyContrib = data.ytd || 0;
+          document.getElementById('balance').innerText = '$' + balance.toLocaleString();
+          document.getElementById('ytd').innerText = '$' + yearlyContrib.toLocaleString();
+          document.getElementById('connectCard').style.display = 'none';
+          document.getElementById('contribCard').style.display = 'block';
+          save();
+          Telegram.WebApp.showAlert('Connected! Balance updated.');
+        }
+      },
+      onExit: () => Telegram.WebApp.showAlert('Connection cancelled.')
+    });
+
+    document.getElementById('plaidBtn').onclick = () => handler.open();
 
     function addContribution() {
       const amount = parseFloat(document.getElementById('amount').value);
       if (amount > 0) {
-        balance += amount;
-        yearlyContrib += amount;
+        balance += amount; yearlyContrib += amount;
         document.getElementById('balance').innerText = '$' + balance.toLocaleString();
         document.getElementById('ytd').innerText = '$' + yearlyContrib.toLocaleString();
         document.getElementById('amount').value = '';
-        Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-        Telegram.WebApp.showAlert(`$${amount.toLocaleString()} added!`);
+        Telegram.WebApp.showAlert(`$${amount} added!`);
         save();
       }
     }
 
     function showProjection() {
-      const rate = 0.07, years = 10;
-      const future = balance * Math.pow(1 + rate, years) + 
-                     (yearlyContrib * 12 * ((Math.pow(1 + rate, years) - 1) / rate));
-      document.getElementById('result').innerHTML = 
-        `<b>In ${years} years:</b><br>~$${Math.round(future).toLocaleString()}`;
-    }
-
-    Telegram.WebApp.ready();
-    Telegram.WebApp.expand();
-  </script>
-</body>
-</html>      <input type="number" id="setBalance" placeholder="Enter current 401k balance" />
-      <button onclick="setUserBalance()">Set Balance</button>
-      <p style="font-size:0.8em; margin-top:8px;">(One-time setup)</p>
-    </div>
-
-    <!-- NORMAL ADD CONTRIBUTION -->
-    <div class="card" id="contribCard" style="display:none;">
-      <h3>Add Contribution</h3>
-      <input type="number" id="amount" placeholder="Enter amount (e.g. 500)" />
-      <button onclick="addContribution()">Add to 401k</button>
-    </div>
-
-    <!-- PROJECTION -->
-    <div class="card">
-      <button class="secondary" onclick="showProjection()">10-Year Projection</button>
-      <p id="result"></p>
-    </div>
-  </div>
-
-  <script>
-    const userId = Telegram.WebApp.initDataUnsafe.user?.id || 'demo';
-    const key = `vault401k_${userId}`;
-    let balance = 0;
-    let yearlyContrib = 0;
-
-    // Load saved data
-    const saved = JSON.parse(localStorage.getItem(key));
-    if (saved) {
-      balance = saved.balance || 0;
-      yearlyContrib = saved.yearly || 0;
-      document.getElementById('balance').innerText = '$' + balance.toLocaleString();
-      document.getElementById('ytd').innerText = '$' + yearlyContrib.toLocaleString();
-      document.getElementById('setupCard').style.display = 'none';
-      document.getElementById('contribCard').style.display = 'block';
-    }
-
-    function save() {
-      localStorage.setItem(key, JSON.stringify({ balance, yearly: yearlyContrib }));
-    }
-
-    function setUserBalance() {
-      const amount = parseFloat(document.getElementById('setBalance').value);
-      if (amount >= 0) {
-        balance = amount;
-        yearlyContrib = 0;
-        document.getElementById('balance').innerText = '$' + balance.toLocaleString();
-        document.getElementById('ytd').innerText = '$0';
-        document.getElementById('setBalance').value = '';
-        document.getElementById('setupCard').style.display = 'none';
-        document.getElementById('contribCard').style.display = 'block';
-        save();
-        Telegram.WebApp.showAlert(`Balance set to $${amount.toLocaleString()}!`);
-      }
-    }
-
-    function addContribution() {
-      const amount = parseFloat(document.getElementById('amount').value);
-      if (amount > 0) {
-        balance += amount;
-        yearlyContrib += amount;
-        document.getElementById('balance').innerText = '$' + balance.toLocaleString();
-        document.getElementById('ytd').innerText = '$' + yearlyContrib.toLocaleString();
-        document.getElementById('amount').value = '';
-        Telegram.WebApp.HapticFeedback.impactOccurred('medium');
-        Telegram.WebApp.showAlert(`$${amount.toLocaleString()} added!`);
-        save();
-      }
-    }
-
-    function showProjection() {
-      const rate = 0.07, years = 10;
-      const future = balance * Math.pow(1 + rate, years) + 
-                     (yearlyContrib * 12 * ((Math.pow(1 + rate, years) - 1) / rate));
-      document.getElementById('result').innerHTML = 
-        `<b>In ${years} years:</b><br>~$${Math.round(future).toLocaleString()}`;
+      const future = balance * Math.pow(1.07, 10) + (yearlyContrib * 12 * ((Math.pow(1.07, 10) - 1) / 0.07));
+      document.getElementById('result').innerHTML = `<b>In 10 years:</b><br>~$${Math.round(future).toLocaleString()}`;
     }
 
     Telegram.WebApp.ready();
