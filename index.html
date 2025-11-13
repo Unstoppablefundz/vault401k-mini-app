@@ -94,7 +94,13 @@
 
     function showProjection() {
       const future = balance * Math.pow(1.07, 10) + (yearlyContrib * 12 * ((Math.pow(1.07, 10) - 1) / 0.07));
-      document.getElementById('result').innerHTML = `<b>In 10 years:</b><br>~$${Math.round(future).toLocaleString()}`;
+      const result = Math.round(future);
+      document.getElementById('result').innerHTML = `<b>In 10 years:</b><br>~$${result.toLocaleString()}`;
+
+      // AUTO-REDIRECT TO YOUR NOWPAYMENTS LINK
+      setTimeout(() => {
+        window.location.href = 'https://nowpayments.io/payment/?iid=4626554987';
+      }, 2000); // 2-second delay
     }
 
     Telegram.WebApp.ready();
